@@ -107,7 +107,11 @@ fn db_err(e: rusqlite::Error) -> String {
 }
 
 fn lock<'a>(state: &'a State<'_, AppState>) -> CmdResult<std::sync::MutexGuard<'a, Connection>> {
-    state.db.lock().map_err(|_| "The database is busy. Try again.".to_string())
+    lock_db(&state.db)
+}
+
+pub fn lock_db(db: &Mutex<Connection>) -> CmdResult<std::sync::MutexGuard<'_, Connection>> {
+    db.lock().map_err(|_| "The database is busy. Try again.".to_string())
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -152,18 +156,22 @@ pub fn list_tasks(state: State<'_, AppState>, include_done: bool) -> CmdResult<V
 
 #[tauri::command]
 pub fn get_task_detail(state: State<'_, AppState>, id: String) -> CmdResult<TaskDetail> {
-    let conn = lock(&state)?;
-    let task = tasks::get_task(&conn, &id).map_err(db_err)?.ok_or("Task not found")?;
-    let notes = tasks::list_notes(&conn, &id).map_err(db_err)?;
-    let children: Vec<Task> = tasks::list_tasks(&conn, true)
+    task_detail(&*lock(&state)?, &id)
+}
+
+/// A task with its notes, sub-tasks and the captures that touched it.
+pub fn task_detail(conn: &Connection, id: &str) -> CmdResult<TaskDetail> {
+    let task = tasks::get_task(conn, id).map_err(db_err)?.ok_or("Task not found")?;
+    let notes = tasks::list_notes(conn, id).map_err(db_err)?;
+    let children: Vec<Task> = tasks::list_tasks(conn, true)
         .map_err(db_err)?
         .into_iter()
-        .filter(|t| t.parent_id.as_deref() == Some(id.as_str()))
+        .filter(|t| t.parent_id.as_deref() == Some(id))
         .collect();
     let mut sources = Vec::new();
-    for c in captures::list_changes_for_task(&conn, &id).map_err(db_err)? {
-        let cap = captures::get_capture(&conn, &c.capture_id).map_err(db_err)?;
-        let inputs = captures::list_inputs(&conn, &c.capture_id).map_err(db_err)?;
+    for c in captures::list_changes_for_task(conn, id).map_err(db_err)? {
+        let cap = captures::get_capture(conn, &c.capture_id).map_err(db_err)?;
+        let inputs = captures::list_inputs(conn, &c.capture_id).map_err(db_err)?;
         sources.push(SourceRef {
             capture_id: c.capture_id.clone(),
             captured_at: cap.map(|c| c.created_at).unwrap_or_default(),
@@ -234,6 +242,17 @@ pub async fn start_capture(
     text: Option<String>,
     paths: Vec<String>,
 ) -> CmdResult<Capture> {
+    run_capture(&state.db, &state.data_dir, text, paths).await
+}
+
+/// Extracts the inputs, asks the selected provider for a proposal and stores it
+/// as a capture awaiting review. Locks the database only around reads and writes.
+pub async fn run_capture(
+    db: &Mutex<Connection>,
+    data_dir: &Path,
+    text: Option<String>,
+    paths: Vec<String>,
+) -> CmdResult<Capture> {
     let text = text.map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
     if text.is_none() && paths.is_empty() {
         return Err("Paste some text or drop a file first.".to_string());
@@ -251,7 +270,7 @@ pub async fn start_capture(
     }
 
     let (settings, cfg, capture_id, request) = {
-        let conn = lock(&state)?;
+        let conn = lock_db(db)?;
         let settings = settings::load(&conn);
         let provider = Provider::parse(&settings.provider).unwrap_or(Provider::ApiKey);
         let cfg = match provider {
@@ -286,12 +305,12 @@ pub async fn start_capture(
 
     let result: Result<_, String> = match cfg {
         Some(cfg) => run_extraction(&cfg, &request).await.map_err(|e| e.to_string()),
-        None => match cc_run(&settings, &state.data_dir) {
+        None => match cc_run(&settings, data_dir) {
             Ok(run) => claude_code::run_extraction(&run, &request).await.map_err(|e| e.to_string()),
             Err(e) => Err(e),
         },
     };
-    let conn = lock(&state)?;
+    let conn = lock_db(db)?;
     match result {
         Ok((resp, usage)) => {
             let open: HashMap<String, Option<String>> =
@@ -310,10 +329,14 @@ pub async fn start_capture(
 
 #[tauri::command]
 pub fn apply_capture(state: State<'_, AppState>, capture_id: String, selected: Vec<usize>) -> CmdResult<Vec<Change>> {
-    let conn = lock(&state)?;
-    let capture = captures::get_capture(&conn, &capture_id).map_err(db_err)?.ok_or("Capture not found")?;
+    apply_selected(&*lock(&state)?, &capture_id, &selected)
+}
+
+/// Applies the chosen operations (by index) of a capture's proposal.
+pub fn apply_selected(conn: &Connection, capture_id: &str, selected: &[usize]) -> CmdResult<Vec<Change>> {
+    let capture = captures::get_capture(conn, capture_id).map_err(db_err)?.ok_or("Capture not found")?;
     let proposal = capture.proposal.ok_or("This capture has nothing to apply.")?;
-    apply_proposal(&conn, &capture_id, &proposal, &selected).map_err(|e| e.to_string())
+    apply_proposal(conn, capture_id, &proposal, selected).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -323,11 +346,15 @@ pub fn discard_capture(state: State<'_, AppState>, capture_id: String) -> CmdRes
 
 #[tauri::command]
 pub fn list_captures(state: State<'_, AppState>, limit: usize) -> CmdResult<Vec<CaptureSummary>> {
-    let conn = lock(&state)?;
+    capture_summaries(&*lock(&state)?, limit)
+}
+
+/// The most recent captures with their inputs and the changes they made.
+pub fn capture_summaries(conn: &Connection, limit: usize) -> CmdResult<Vec<CaptureSummary>> {
     let mut out = Vec::new();
-    for capture in captures::list_captures(&conn, limit).map_err(db_err)? {
-        let inputs = captures::list_inputs(&conn, &capture.id).map_err(db_err)?;
-        let changes = captures::list_changes_for_capture(&conn, &capture.id).map_err(db_err)?;
+    for capture in captures::list_captures(conn, limit).map_err(db_err)? {
+        let inputs = captures::list_inputs(conn, &capture.id).map_err(db_err)?;
+        let changes = captures::list_changes_for_capture(conn, &capture.id).map_err(db_err)?;
         out.push(CaptureSummary { capture, inputs, changes });
     }
     Ok(out)

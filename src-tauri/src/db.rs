@@ -8,6 +8,9 @@ pub fn open(path: &Path) -> rusqlite::Result<Connection> {
         let _ = std::fs::create_dir_all(parent);
     }
     let conn = Connection::open(path)?;
+    // The window, the MCP server and the command-line modes can each hold a
+    // connection; wait for another writer instead of failing at once.
+    conn.busy_timeout(std::time::Duration::from_secs(5))?;
     conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")?;
     migrate(&conn)?;
     Ok(conn)

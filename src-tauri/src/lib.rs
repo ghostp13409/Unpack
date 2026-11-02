@@ -4,6 +4,7 @@ pub mod commands;
 pub mod db;
 pub mod headless;
 pub mod ingest;
+pub mod mcp;
 pub mod models;
 pub mod ranking;
 pub mod repo;
@@ -18,6 +19,9 @@ use tauri::Manager;
 pub fn run() {
     let context = tauri::generate_context!();
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("--mcp") {
+        std::process::exit(mcp::serve_stdio(&context.config().identifier));
+    }
     if let Some(code) = headless::maybe_run(&context.config().identifier, &args) {
         std::process::exit(code);
     }

@@ -25,6 +25,10 @@ Code tasks 1–9 of the plan are done. Verification at HEAD: `cargo test --lib` 
 
 Done after the final review (2026-11-01 evening): the review's Critical and Important findings fixed as minimal edits (the user asked for no test ceremony after the review); version 0.2.0 built and installed for the current user at `%LOCALAPPDATA%\Unpack\unpack.exe`; the installed app's `--probe` reports the Claude Code provider ready with the user's work Claude account; a clean single-commit snapshot of the tree pushed to a private GitHub repo named Unpack under the user's personal account (default branch `main`; the local branch `snapshot` tracks it; the full history stays local on `feat/v1`); the user's real tasks loaded into the installed app's database from the planning workspace through `unpack --import` (97 tasks, 8 done, 14 in progress) with the proposal files kept outside the repo. Not verified in the installed build: the title bar double-click (handled by Tauri's drag script after the review fix). `feat/v1` is still unmerged into `master`; that decision is the user's.
 
+## MCP server (v0.3.0, 2026-11-02, branch `feat/mcp`)
+
+`unpack --mcp` serves the Model Context Protocol over stdin/stdout (newline-delimited JSON-RPC, hand-written in `src-tauri/src/mcp.rs`, no new dependencies). It exposes every app feature except setting or clearing the API key (secrets stay out of chat) and opening the data folder (a window action): tasks, notes, categories, up next, capture/apply/discard, `apply_operations` (Claude Code's own proposal recorded as an undoable capture, built on `headless::import_response`), activity, undo, settings and the provider check. Shared logic moved out of the Tauri commands into `task_detail`, `run_capture`, `apply_selected`, `capture_summaries` and `headless::probe`. `db::open` sets a 5 s busy timeout because the window and the MCP server write the same database, and the window reloads tasks and settings on focus. Registered for the user with `claude mcp add --scope user unpack -- <exe> --mcp`.
+
 ## Rulings worth knowing
 
 - reqwest uses `native-tls` plus `system-proxy` (Windows cert store and proxy settings).

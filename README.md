@@ -105,6 +105,38 @@ open tasks exactly like a model answer, applied in full, and shows up in
 Activity where each change can be undone. `--as <label>` sets the capture's
 model label (default `manual-import`).
 
+## Use it from Claude Code (MCP)
+
+`unpack --mcp` runs a [Model Context Protocol](https://modelcontextprotocol.io)
+server on stdin/stdout, so Claude Code (or any MCP client) can read and change
+your tasks. Register it once for all your projects:
+
+```
+claude mcp add --scope user unpack -- "%LOCALAPPDATA%\Unpack\unpack.exe" --mcp
+```
+
+Use the full path to `unpack.exe` if you installed it somewhere else. Then ask
+Claude Code things like "what should I work on next?", "mark the runbook task
+done", or "turn this transcript into tasks". The tools:
+
+| Tool | What it does |
+| --- | --- |
+| `list_tasks` | Tasks, filtered by status, category, parent or text |
+| `get_task` | One task with notes, sub-tasks and the captures that touched it |
+| `create_task`, `update_task` | Add a task or change any of its fields (status, priority, due date, pin, snooze, parent…) |
+| `add_note`, `delete_note` | Notes on a task |
+| `list_categories` | Categories in use |
+| `up_next` | The Focus view's ranking, with reasons |
+| `apply_operations` | Apply create / update / complete / add-note operations Claude Code worked out itself, recorded as one capture in Activity |
+| `capture`, `apply_capture`, `discard_capture` | Run Unpack's own model over text or files, then apply or discard its proposal |
+| `list_activity`, `undo_change` | Recent captures and their changes; undo any change |
+| `get_settings`, `update_settings`, `check_provider` | Settings and provider readiness |
+
+The API key cannot be set through MCP; enter it in the app. The server uses
+the same database as the window, and the window reloads its data when it
+regains focus. An open detail panel picks up field changes at once and new
+notes when you reopen it.
+
 ## Where data lives
 
 - Tasks, notes, captures and change history are in a SQLite database at
@@ -127,6 +159,7 @@ model label (default `manual-import`).
 src/                 React UI (views, components, zustand store, API layer)
 src/lib/mockApi.ts   browser-only stand-in for the backend
 src-tauri/src/       Rust: models, SQLite repo, ranking, ingest parsers,
-                     Claude client + prompt, apply/undo, Tauri commands
+                     Claude client + prompt, apply/undo, Tauri commands,
+                     command-line modes and the MCP server (mcp.rs)
 docs/                original brief, design spec and implementation plan
 ```

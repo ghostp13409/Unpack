@@ -26,6 +26,19 @@ export default function App() {
     void loadSettings().then(() => probeProvider());
   }, [loadAll, loadSettings, probeProvider]);
 
+  // Claude Code (through `unpack --mcp`) and the command-line modes write to the
+  // same database; pick up their changes whenever the window comes back.
+  useEffect(() => {
+    const onFocus = () => {
+      void loadAll();
+      void loadSettings();
+      const { view, refreshActivity } = useStore.getState();
+      if (view === "activity") void refreshActivity();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [loadAll, loadSettings]);
+
   useEffect(() => {
     const root = document.documentElement;
     if (theme === "light" || theme === "dark") root.setAttribute("data-theme", theme);

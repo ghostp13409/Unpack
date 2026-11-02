@@ -16,6 +16,7 @@ use crate::apply::apply_proposal;
 use crate::commands::compute_status;
 use crate::models::{Change, InputKind, Status, Task, TaskPatch};
 use crate::repo::{captures, tasks};
+use crate::settings::ProviderStatus;
 use crate::{db, secrets, settings};
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -64,18 +65,7 @@ fn run_mode(identifier: &str, mode: &str, args: &[String]) -> Result<Value, Stri
     std::fs::create_dir_all(&dir).map_err(|e| format!("Could not create the data folder: {e}"))?;
     let conn = db::open(&dir.join("tasks.db")).map_err(|e| format!("Database error: {e}"))?;
     match mode {
-        "--probe" => {
-            let s = settings::load(&conn);
-            let has_key = secrets::get_api_key().unwrap_or(None).is_some();
-            let status = tauri::async_runtime::block_on(compute_status(&s, has_key));
-            settings::save_status(&conn, &status).map_err(|e| format!("Database error: {e}"))?;
-            if s.provider != status.provider {
-                let mut s2 = s.clone();
-                s2.provider = status.provider.clone();
-                settings::save(&conn, &s2).map_err(|e| format!("Database error: {e}"))?;
-            }
-            Ok(json!({"ok": true, "probe": status}))
-        }
+        "--probe" => Ok(json!({"ok": true, "probe": probe(&conn)?})),
         "--list-tasks" => {
             let all = tasks::list_tasks(&conn, true).map_err(|e| format!("Database error: {e}"))?;
             Ok(json!({"ok": true, "tasks": all}))
@@ -98,9 +88,33 @@ fn run_mode(identifier: &str, mode: &str, args: &[String]) -> Result<Value, Stri
     }
 }
 
+/// Re-checks the selected provider and stores the result (and an auto-chosen provider).
+pub fn probe(conn: &Connection) -> Result<ProviderStatus, String> {
+    let s = settings::load(conn);
+    let has_key = secrets::get_api_key().unwrap_or(None).is_some();
+    let status = tauri::async_runtime::block_on(compute_status(&s, has_key));
+    settings::save_status(conn, &status).map_err(|e| format!("Database error: {e}"))?;
+    if s.provider != status.provider {
+        settings::set_provider(conn, &status.provider).map_err(|e| format!("Database error: {e}"))?;
+    }
+    Ok(status)
+}
+
 /// Stores a proposal in the model's response shape as a capture and applies every operation.
 pub fn import_proposal(conn: &Connection, text: &str, filename: &str, label: &str) -> Result<(String, Vec<Change>, Vec<String>), String> {
     let resp: ModelResponse = serde_json::from_str(text).map_err(|e| format!("The proposal file could not be read: {e}"))?;
+    import_response(conn, resp, text, filename, label)
+}
+
+/// Records `resp` as a capture (with `text` as its input) and applies every operation.
+/// Returns the capture id, the changes made, and warnings about operations that were skipped.
+pub fn import_response(
+    conn: &Connection,
+    resp: ModelResponse,
+    text: &str,
+    filename: &str,
+    label: &str,
+) -> Result<(String, Vec<Change>, Vec<String>), String> {
     let db_err = |e: rusqlite::Error| format!("Database error: {e}");
     let open: HashMap<String, Option<String>> = tasks::list_tasks(conn, false)
         .map_err(db_err)?
