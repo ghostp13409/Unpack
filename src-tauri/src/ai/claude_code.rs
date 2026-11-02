@@ -18,6 +18,8 @@ use tokio::process::Command;
 const AUTH_TIMEOUT: Duration = Duration::from_secs(20);
 const ENV_REMOVED: [&str; 3] = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL"];
 const EXE_NAMES: [&str; 3] = ["claude.exe", "claude.cmd", "claude"];
+/// Where an npm global install keeps the real program, relative to the `claude.cmd` shim's folder.
+const NPM_CLI_REL: [&str; 4] = ["node_modules", "@anthropic-ai", "claude-code", "cli.js"];
 
 #[derive(Debug, thiserror::Error)]
 pub enum CcError {
@@ -139,10 +141,30 @@ pub fn locate(override_path: &str) -> Option<PathBuf> {
     None
 }
 
+/// An npm `claude.cmd` shim only runs `node <cli.js>`; batch files cannot take the quoted
+/// JSON schema argument, so the shim is resolved to that (node program, cli.js) pair when
+/// the npm layout is beside it. Any other executable is returned as is.
+fn resolve_shim(exe: &Path) -> (PathBuf, Vec<PathBuf>) {
+    let is_batch = exe
+        .extension()
+        .map(|e| e.eq_ignore_ascii_case("cmd") || e.eq_ignore_ascii_case("bat"))
+        .unwrap_or(false);
+    if let (true, Some(dir)) = (is_batch, exe.parent()) {
+        let cli = dir.join(NPM_CLI_REL.iter().collect::<PathBuf>());
+        if cli.is_file() {
+            let local_node = dir.join("node.exe");
+            let node = if local_node.is_file() { local_node } else { PathBuf::from("node") };
+            return (node, vec![cli]);
+        }
+    }
+    (exe.to_path_buf(), vec![])
+}
+
 /// A `claude` command with the subscription as its only credential and no console window.
-/// `.cmd`/`.bat` shims are handled by the standard library, which keeps every argument intact.
 pub fn command(exe: &Path) -> Command {
-    let mut cmd = Command::new(exe);
+    let (program, lead) = resolve_shim(exe);
+    let mut cmd = Command::new(program);
+    cmd.args(lead);
     for var in ENV_REMOVED {
         cmd.env_remove(var);
     }
@@ -196,6 +218,8 @@ async fn run_print(run: &CcRun, prompt: &str, schema: &Value, extra: &[String], 
         .stderr(Stdio::piped());
     let mut child = cmd.spawn().map_err(|e| match e.kind() {
         std::io::ErrorKind::NotFound => CcError::NotFound,
+        // A batch file that is not the npm shim: Windows cannot pass it the quoted schema argument.
+        std::io::ErrorKind::InvalidInput => CcError::Failed("Claude Code is installed as a batch file Unpack cannot call. Set the path to claude.exe in Settings.".to_string()),
         _ => CcError::Io(e.to_string()),
     })?;
     let mut stdin = child.stdin.take().ok_or_else(|| CcError::Io("no stdin".to_string()))?;
@@ -381,20 +405,37 @@ mod tests {
         assert_eq!(CcError::Timeout.to_string(), "Claude Code took too long.");
     }
 
-    // ---- spawn tests against a fake CLI (Windows .cmd shim) ----
+    // ---- spawn tests against a fake CLI (an npm-style `claude.cmd` shim beside its `cli.js`) ----
 
     const GOOD_ENVELOPE: &str = r#"{"type":"result","subtype":"success","is_error":false,"usage":{"input_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":20},"modelUsage":{"claude-haiku-5-5":{}},"api_error_status":null,"result":"","structured_output":{"summary":"one task","operations":[{"op":"create","temp_id":"t1","task_id":null,"title":"Write the report","description":null,"priority":"high","category":null,"due_date":null,"parent_id":null,"body":null,"reason":"asked","evidence":null}]}}"#;
 
-    /// Writes a fake `claude.cmd` that prints `envelope` (after optional `prelude` lines) and returns its path.
+    /// Writes an npm-style shim: `claude.cmd` plus `node_modules/@anthropic-ai/claude-code/cli.js`, where
+    /// `cli.js` runs `prelude` (JavaScript) and then prints `envelope`. Returns (shim path, folder).
     fn fake_claude(name: &str, envelope: &str, prelude: &str) -> (PathBuf, PathBuf) {
         let dir = std::env::temp_dir().join(format!("unpack_fake_{name}_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let pkg = dir.join(NPM_CLI_REL.iter().collect::<PathBuf>());
+        std::fs::create_dir_all(pkg.parent().unwrap()).unwrap();
         std::fs::write(dir.join("envelope.json"), envelope).unwrap();
-        let script = format!("@echo off\r\n{prelude}\r\ntype \"{}\"\r\n", dir.join("envelope.json").display());
+        let script = format!(
+            "{prelude}\nprocess.stdout.write(require('fs').readFileSync({}, 'utf8'));\n",
+            serde_json::to_string(&dir.join("envelope.json").to_string_lossy()).unwrap()
+        );
+        std::fs::write(&pkg, script).unwrap();
         let exe = dir.join("claude.cmd");
-        std::fs::write(&exe, script).unwrap();
+        std::fs::write(&exe, "@ECHO off\r\nnode \"%~dp0\\node_modules\\@anthropic-ai\\claude-code\\cli.js\" %*\r\n").unwrap();
         (exe, dir)
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn npm_cmd_shim_resolves_to_node_running_cli_js() {
+        let (exe, dir) = fake_claude("resolve", GOOD_ENVELOPE, "");
+        let c = command(&exe);
+        let program = c.as_std().get_program().to_string_lossy().to_lowercase();
+        assert!(program == "node" || program.ends_with("node.exe"), "program was {program}");
+        let first = c.as_std().get_args().next().unwrap().to_string_lossy().to_string();
+        assert_eq!(first, dir.join(NPM_CLI_REL.iter().collect::<PathBuf>()).to_string_lossy());
     }
 
     fn run_for(exe: PathBuf, dir: &Path, timeout_secs: u64) -> CcRun {
@@ -444,10 +485,13 @@ mod tests {
     #[cfg(windows)]
     #[tokio::test]
     async fn large_prompt_goes_through_stdin() {
-        let (exe, dir) = fake_claude("stdin", GOOD_ENVELOPE, "");
-        let capture = dir.join("stdin.txt");
-        let script = format!("@echo off\r\nmore > \"{}\"\r\ntype \"{}\"\r\n", capture.display(), dir.join("envelope.json").display());
-        std::fs::write(&exe, script).unwrap();
+        let capture = std::env::temp_dir().join(format!("unpack_fake_stdin_{}.txt", std::process::id()));
+        let _ = std::fs::remove_file(&capture);
+        let prelude = format!(
+            "require('fs').writeFileSync({}, require('fs').readFileSync(0));",
+            serde_json::to_string(&capture.to_string_lossy()).unwrap()
+        );
+        let (exe, dir) = fake_claude("stdin", GOOD_ENVELOPE, &prelude);
         let run = run_for(exe, &dir, 60);
         let big = "x".repeat(200_000);
         let req = request(vec![Extracted::Text { filename: "big.txt".into(), text: big }]);
@@ -473,7 +517,7 @@ mod tests {
     #[cfg(windows)]
     #[tokio::test]
     async fn timeout_kills_the_child() {
-        let (exe, dir) = fake_claude("slow", GOOD_ENVELOPE, "ping -n 10 127.0.0.1 >nul");
+        let (exe, dir) = fake_claude("slow", GOOD_ENVELOPE, "const end = Date.now() + 10000; while (Date.now() < end) {}");
         let run = run_for(exe, &dir, 1);
         let started = std::time::Instant::now();
         let err = run_extraction(&run, &request(vec![])).await.unwrap_err();
