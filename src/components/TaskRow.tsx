@@ -42,7 +42,7 @@ export function TaskRow({ task, child, reason, subtasks, fadeOnDone, hideCategor
       data-task-id={task.id}
       onClick={() => selectTask(task.id)}
     >
-      <Checkbox checked={done} onChange={() => toggleDone(task.id)} />
+      <Checkbox checked={done} onChange={(o) => toggleDone(task.id, o)} />
       <PriorityDot priority={task.priority} />
       <div className="row-main">
         <div className="row-title">{task.title}</div>

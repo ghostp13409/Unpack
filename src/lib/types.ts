@@ -143,6 +143,10 @@ export interface Settings {
   /** "" until the first readiness probe decides. */
   provider: ProviderName | "" | string;
   claude_code_path: string;
+  /** Play a chime when a task is completed. */
+  sounds: boolean;
+  /** Show confetti and balloons when a task is completed. */
+  animations: boolean;
 }
 
 /** Last readiness result of the selected provider. */

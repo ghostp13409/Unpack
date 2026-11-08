@@ -51,3 +51,14 @@ npm run tauri build    # installers under src-tauri/target/release/bundle/
 ```
 
 Gotchas learned: the Bash tool in this harness truncates long heredocs (roughly >6 KB) and Python heredocs choke on backslash escapes, so patch scripts are written with the Write tool (raw strings) and run from the scratchpad. `keyring` 4 uses feature `windows-native-keyring-store`; `reqwest` 0.13 needs `system-proxy` listed explicitly when `default-features = false`. httpmock 0.9 renamed `json_body_partial` to `json_body_includes`. Taking `&lock(&state)?` needs `&*lock(&state)?`. Vite binds `[::1]:5173` only, so use `http://localhost:5173`. Stopping a background `npm run dev` task does not kill node; kill the PID on port 5173. A screen capture of the real window works from PowerShell (`CopyFromScreen`) and the PNG can be viewed with the Read tool.
+
+## Rewards and autostart (v0.4.0, 2026-11-08, branch `feat/rewards-autostart`)
+
+Spec `docs/superpowers/specs/2026-11-08-rewards-and-autostart-design.md`, plan `docs/superpowers/plans/2026-11-08-rewards-and-autostart.md`.
+
+- Tiered celebrations (subtask tick, task confetti + chime, big task balloons + chord) with 10s combos; one store path, `toggleDone(id, origin?, next?)`, used by every user completion (list checkbox, `D`, detail sub-task checkbox, detail Status select). Pure logic in `src/lib/celebrate/decide.ts`; effects in `fx.ts` (canvas) and `sound.ts` (Web Audio, no files).
+- Finishing the last open subtask auto-completes the parent; un-checking a subtask reopens a done parent. UI-only rule: AI/MCP changes neither celebrate nor cascade.
+- Stats chip in the title bar (`StatsChip.tsx`, `src/store/stats.ts`): workday streak (weekends skipped), today, best, Mon–Fri week chart; weekly recap line in Activity. All derived from `completed_at`, no schema change.
+- Settings: `sounds`, `animations` (default true, stored as "true"/"false"); "Start Unpack when Windows starts" via `tauri-plugin-autostart`, registered with no args, state read from the plugin.
+- Verified: unit tests, headless browser run against the mock API, and the dev build's real window over the WebView2 debug port (autostart adds/removes the HKCU Run entry).
+- Known: the Focus strip's "done this week" counts the last 7 days while the stats popover counts Mon–Sun.

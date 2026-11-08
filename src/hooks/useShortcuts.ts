@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { originOf } from "../lib/celebrate";
 import { useStore } from "../store/useStore";
 import { nextCursor, resolveShortcut } from "./shortcuts";
 
@@ -85,7 +86,8 @@ export function useShortcuts() {
           const id = s.cursorId && visibleIds().includes(s.cursorId) ? s.cursorId : s.selectedId;
           if (!id) return;
           e.preventDefault();
-          void s.toggleDone(id);
+          const check = document.querySelector(`[data-task-id="${id}"] .row-check`);
+          void s.toggleDone(id, check ? originOf(check) : undefined);
           return;
         }
         case "editTitle": {

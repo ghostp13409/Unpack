@@ -1,11 +1,12 @@
 import { ChevronRight, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "../components/Button";
 import { EmptyState } from "../components/EmptyState";
 import * as api from "../lib/api";
 import { formatDateTime } from "../lib/dates";
 import type { CaptureSummary, Change } from "../lib/types";
 import { PRIORITY_LABEL } from "../lib/types";
+import { computeStats } from "../store/stats";
 import { useStore } from "../store/useStore";
 
 function describe(c: Change, titleOf: (id: string | null) => string): string {
@@ -120,6 +121,7 @@ export function ActivityView() {
   const loadAll = useStore((s) => s.loadAll);
   const tasks = useStore((s) => s.tasks);
   const [loading, setLoading] = useState(true);
+  const { week } = useMemo(() => computeStats(tasks), [tasks]);
 
   useEffect(() => {
     refreshActivity().finally(() => setLoading(false));
@@ -137,6 +139,12 @@ export function ActivityView() {
           <div>
             <h1>Activity</h1>
             <div className="page-sub">What each capture changed. Undo anything here.</div>
+            {week.total > 0 && (
+              <div className="page-sub">
+                This week: {week.total === 1 ? "1 task" : `${week.total} tasks`} finished
+                {week.big > 0 ? `, ${week.big === 1 ? "1 of them a big one" : `${week.big} of them big ones`}` : ""}.
+              </div>
+            )}
           </div>
         </header>
         {loading ? (

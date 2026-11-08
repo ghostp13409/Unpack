@@ -83,6 +83,22 @@ export const testConnection = () => invoke<string>("test_connection");
 export const probeProvider = () => invoke<ProviderStatus>("probe_provider");
 export const openDataFolder = () => invoke<void>("open_data_folder");
 
+// Autostart lives in the Tauri plugin (a Run registry entry), not in our own commands.
+export async function autostartEnabled(): Promise<boolean> {
+  if (inTauri) {
+    const { isEnabled } = await import("@tauri-apps/plugin-autostart");
+    return isEnabled();
+  }
+  return (await mock()).autostartEnabled();
+}
+export async function setAutostart(on: boolean): Promise<void> {
+  if (inTauri) {
+    const { enable, disable } = await import("@tauri-apps/plugin-autostart");
+    return on ? enable() : disable();
+  }
+  return (await mock()).setAutostart(on);
+}
+
 /** Tauri rejects commands with a plain string; normalize anything else. */
 export function errorMessage(e: unknown): string {
   if (typeof e === "string") return e;

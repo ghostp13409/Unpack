@@ -4,7 +4,7 @@ import { notReadyMessage, providerReady } from "./provider";
 
 function view(provider: string, ready: boolean, detail = ""): SettingsView {
   return {
-    settings: { model: "m", effort: "low", user_name: "", manager_name: "", theme: "system", provider, claude_code_path: "" },
+    settings: { model: "m", effort: "low", user_name: "", manager_name: "", theme: "system", provider, claude_code_path: "", sounds: true, animations: true },
     has_key: false,
     key_hint: null,
     data_dir: "",

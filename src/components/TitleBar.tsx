@@ -1,6 +1,7 @@
 import { Copy, Minus, Square, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { inTauri } from "../lib/api";
+import { StatsChip } from "./StatsChip";
 
 async function win() {
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
@@ -33,6 +34,7 @@ export function TitleBar() {
         Unpack
       </span>
       <span className="tb-spacer" data-tauri-drag-region />
+      <StatsChip />
       <div className="tb-controls">
         <button className="tb-btn" onClick={act((w) => w.minimize())} aria-label="Minimize" title="Minimize">
           <Minus size={14} />
