@@ -65,8 +65,9 @@ const tasks: Task[] = [
 const notes: Note[] = [
   { id: id(), task_id: tracking.id, body: "Jordan said staging DSN is ready; prod DSN comes after the security review.", source_capture_id: "cap-1", created_at: "2026-10-30T16:00:00Z" },
 ];
-let settings: Settings = { model: "claude-haiku-5-5", effort: "medium", user_name: "Sam", manager_name: "Alex Morgan", theme: "system", provider: "", claude_code_path: "" };
+let settings: Settings = { model: "claude-haiku-5-5", effort: "medium", user_name: "Sam", manager_name: "Alex Morgan", theme: "system", provider: "", claude_code_path: "", sounds: true, animations: true };
 let hasKey = false;
+let autostart = false;
 /** Browser stand-in: Claude Code counts as installed and signed in unless the path override says "missing". */
 function mockStatus(): ProviderStatus {
   const ccReady = settings.claude_code_path.trim() !== "missing";
@@ -294,5 +295,11 @@ export const mockApi = {
   },
   async openDataFolder() {
     /* no-op in the browser */
+  },
+  async autostartEnabled() {
+    return autostart;
+  },
+  async setAutostart(on: boolean) {
+    autostart = on;
   },
 };

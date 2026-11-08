@@ -14,6 +14,16 @@ pub struct Settings {
     /// Optional explicit path to the Claude Code executable.
     #[serde(default)]
     pub claude_code_path: String,
+    /// Play a chime when a task is completed.
+    #[serde(default = "yes")]
+    pub sounds: bool,
+    /// Show confetti and balloons when a task is completed.
+    #[serde(default = "yes")]
+    pub animations: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 impl Default for Settings {
@@ -26,6 +36,8 @@ impl Default for Settings {
             theme: "system".to_string(),
             provider: String::new(),
             claude_code_path: String::new(),
+            sounds: true,
+            animations: true,
         }
     }
 }
@@ -98,6 +110,8 @@ pub fn load(conn: &Connection) -> Settings {
         theme: get(conn, "theme").filter(|v| !v.trim().is_empty()).unwrap_or(d.theme),
         provider: get(conn, "provider").unwrap_or(d.provider),
         claude_code_path: get(conn, "claude_code_path").unwrap_or(d.claude_code_path),
+        sounds: get(conn, "sounds").map(|v| v != "false").unwrap_or(true),
+        animations: get(conn, "animations").map(|v| v != "false").unwrap_or(true),
     }
 }
 
@@ -106,7 +120,17 @@ pub fn save(conn: &Connection, s: &Settings) -> rusqlite::Result<()> {
     for (key, value) in KEYS.iter().zip(values) {
         upsert(conn, key, value)?;
     }
+    upsert(conn, "sounds", bool_str(s.sounds))?;
+    upsert(conn, "animations", bool_str(s.animations))?;
     Ok(())
+}
+
+fn bool_str(b: bool) -> &'static str {
+    if b {
+        "true"
+    } else {
+        "false"
+    }
 }
 
 #[cfg(test)]
@@ -123,6 +147,7 @@ mod tests {
         assert_eq!(s.user_name, "");
         assert_eq!(s.manager_name, "");
         assert_eq!(s.theme, "system");
+        assert!(s.sounds && s.animations);
     }
 
     #[test]
@@ -136,6 +161,8 @@ mod tests {
             theme: "dark".into(),
             provider: String::new(),
             claude_code_path: String::new(),
+            sounds: false,
+            animations: false,
         };
         save(&conn, &s).unwrap();
         assert_eq!(load(&conn), s);
@@ -143,6 +170,15 @@ mod tests {
             .query_row("SELECT value FROM settings WHERE key='schema_version'", [], |r| r.get(0))
             .unwrap();
         assert_eq!(v, "1", "saving settings leaves the schema version alone");
+    }
+
+    #[test]
+    fn missing_reward_keys_default_true_after_older_save() {
+        let conn = open_memory().unwrap();
+        upsert(&conn, "model", "claude-sonnet-5-5").unwrap();
+        let s = load(&conn);
+        assert_eq!(s.model, "claude-sonnet-5-5");
+        assert!(s.sounds && s.animations);
     }
 
     #[test]

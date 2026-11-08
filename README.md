@@ -70,6 +70,22 @@ provider is not ready. There is no automatic fallback from one to the other.
 A single short line in the Capture sheet followed by plain Enter creates a task
 directly without calling the model.
 
+## Rewards
+
+Finishing things feels like something. Completing a task plays a short chime and
+a confetti burst; finishing the last subtask completes its parent and sets off
+confetti and balloons. The title bar shows your workday streak and today's
+count (weekends never break the streak), and Activity opens with a one-line
+weekly recap. Settings → **Rewards** turns the sound and the animations off
+independently, and the animations also stay off when Windows' reduce-motion
+setting is on.
+
+## Start with Windows
+
+Settings → **Startup** has an opt-in "Start Unpack when Windows starts" switch.
+It is off by default and adds a per-user entry that opens Unpack when you sign
+in; turning it off removes the entry.
+
 ## Keyboard
 
 | Keys | Action |

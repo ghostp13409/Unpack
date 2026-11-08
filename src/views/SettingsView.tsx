@@ -18,6 +18,7 @@ export function SettingsView() {
   const [probing, setProbing] = useState(false);
   const [showPath, setShowPath] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [autostart, setAutostartOn] = useState(false);
   const applied = useRef<string>("");
 
   // Reset the draft only when the saved settings really changed, so a background probe
@@ -36,6 +37,11 @@ export function SettingsView() {
     void probeProvider();
   }, [probeProvider]);
 
+  // The OS owns this one (a Run registry entry), so read it fresh rather than keep a copy in settings.
+  useEffect(() => {
+    api.autostartEnabled().then(setAutostartOn, (e) => setError(api.errorMessage(e)));
+  }, [setError]);
+
   if (!view || !draft) return <div className="page" />;
 
   const status = view.provider_status;
@@ -46,6 +52,15 @@ export function SettingsView() {
     try {
       await api.saveSettings(next);
       await loadSettings();
+    } catch (e) {
+      setError(api.errorMessage(e));
+    }
+  };
+
+  const toggleAutostart = async (on: boolean) => {
+    try {
+      await api.setAutostart(on);
+      setAutostartOn(await api.autostartEnabled());
     } catch (e) {
       setError(api.errorMessage(e));
     }
@@ -233,6 +248,45 @@ export function SettingsView() {
               <option value="light">Light</option>
               <option value="dark">Dark</option>
             </select>
+          </div>
+        </section>
+
+        <section className="settings-section">
+          <h3>Rewards</h3>
+          <div className="settings-grid">
+            <label htmlFor="setting-sounds">Celebration sounds</label>
+            <input
+              id="setting-sounds"
+              type="checkbox"
+              className="check"
+              checked={draft.sounds}
+              onChange={(e) => save({ ...draft, sounds: e.target.checked })}
+            />
+            <div className="hint">A short chime when you finish something.</div>
+            <label htmlFor="setting-animations">Celebration animations</label>
+            <input
+              id="setting-animations"
+              type="checkbox"
+              className="check"
+              checked={draft.animations}
+              onChange={(e) => save({ ...draft, animations: e.target.checked })}
+            />
+            <div className="hint">Confetti and balloons. Also off when Windows' reduce-motion setting is on.</div>
+          </div>
+        </section>
+
+        <section className="settings-section">
+          <h3>Startup</h3>
+          <div className="settings-grid">
+            <label htmlFor="setting-autostart">Start Unpack when Windows starts</label>
+            <input
+              id="setting-autostart"
+              type="checkbox"
+              className="check"
+              checked={autostart}
+              onChange={(e) => toggleAutostart(e.target.checked)}
+            />
+            <div className="hint">Opens Unpack when you sign in.</div>
           </div>
         </section>
 

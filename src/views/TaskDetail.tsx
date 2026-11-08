@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "../components/Button";
 import { Checkbox } from "../components/Checkbox";
 import * as api from "../lib/api";
+import { originOf } from "../lib/celebrate";
 import { addDays, formatDateOnly, formatDateTime, todayISO } from "../lib/dates";
 import type { Priority, Status, TaskDetail as Detail } from "../lib/types";
 import { PRIORITIES, PRIORITY_LABEL, STATUS_LABEL } from "../lib/types";
@@ -12,6 +13,7 @@ export function TaskDetail({ id }: { id: string }) {
   const tasks = useStore((s) => s.tasks);
   const selectTask = useStore((s) => s.selectTask);
   const patchTask = useStore((s) => s.patchTask);
+  const toggleDone = useStore((s) => s.toggleDone);
   const loadAll = useStore((s) => s.loadAll);
   const setError = useStore((s) => s.setError);
 
@@ -89,7 +91,16 @@ export function TaskDetail({ id }: { id: string }) {
           className="select select-sm"
           style={{ width: "auto" }}
           value={task.status}
-          onChange={(e) => save({ status: e.target.value as Status })}
+          onChange={async (e) => {
+            const value = e.target.value as Status;
+            // Completing or reopening goes through toggleDone so it celebrates and cascades to the parent.
+            if (value === "done" || task.status === "done") {
+              await toggleDone(task.id, originOf(e.currentTarget), value);
+              await refresh();
+            } else {
+              await save({ status: value });
+            }
+          }}
           aria-label="Status"
         >
           {(["todo", "in_progress", "done"] as Status[]).map((s) => (
@@ -190,8 +201,8 @@ export function TaskDetail({ id }: { id: string }) {
               <div key={c.id} className={`sub-item ${c.status === "done" ? "done" : ""}`}>
                 <Checkbox
                   checked={c.status === "done"}
-                  onChange={async () => {
-                    await patchTask(c.id, { status: c.status === "done" ? "todo" : "done" });
+                  onChange={async (o) => {
+                    await toggleDone(c.id, o);
                     await refresh();
                   }}
                 />

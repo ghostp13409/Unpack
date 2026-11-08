@@ -1011,6 +1011,11 @@
   accent-color: var(--accent);
   margin: 0;
 }
+.settings-grid .check {
+  accent-color: var(--accent);
+  margin: 0;
+  justify-self: start;
+}
 .radio .sub {
   color: var(--faint);
 }
@@ -1032,5 +1037,44 @@
     width: min(var(--detail), 100vw);
     box-shadow: var(--shadow);
     z-index: 10;
+  }
+}
+
+/* ---------- completion celebrations ---------- */
+.combo-pop {
+  position: fixed;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  pointer-events: none;
+  z-index: 60;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .row-check.popping {
+    animation: check-pop 0.45s cubic-bezier(0.3, 1.7, 0.5, 1);
+  }
+  .combo-pop {
+    animation: combo-rise 0.9s ease-out forwards;
+  }
+}
+@keyframes check-pop {
+  0% {
+    transform: scale(0.6);
+  }
+  50% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes combo-rise {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-28px);
   }
 }
