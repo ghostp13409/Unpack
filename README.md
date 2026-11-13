@@ -82,9 +82,13 @@ setting is on.
 
 ## Start with Windows
 
-Settings → **Startup** has an opt-in "Start Unpack when Windows starts" switch.
-It is off by default and adds a per-user entry that opens Unpack when you sign
-in; turning it off removes the entry.
+Press Win+R, type `shell:startup`, and paste a shortcut to Unpack into that
+folder. Unpack then opens when you sign in.
+
+Unpack does not register itself to start with Windows. v0.4.0 did, and
+Microsoft Defender's machine-learning check flagged the unsigned exe as
+`Behavior:Win32/Persistence.A!ml` and quarantined it. A shortcut you add
+yourself avoids that.
 
 ## Keyboard
 

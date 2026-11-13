@@ -30,7 +30,7 @@ export function TaskRow({ task, child, reason, subtasks, fadeOnDone, hideCategor
       setLeaving(false);
       return;
     }
-    const t = setTimeout(() => setLeaving(true), 600);
+    const t = setTimeout(() => setLeaving(true), 700);
     return () => clearTimeout(t);
   }, [done, fadeOnDone]);
 
