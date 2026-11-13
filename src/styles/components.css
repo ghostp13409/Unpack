@@ -341,7 +341,10 @@
   width: 1px;
   background: var(--border);
 }
-.row.done {
+/* Dim the text of a done row, not its checkbox, so the blue tick stays crisp. */
+.row.done .row-main,
+.row.done .row-meta,
+.row.done > .dot {
   opacity: 0.55;
 }
 .row.done .row-title {
@@ -350,6 +353,7 @@
 }
 .row.leaving {
   opacity: 0;
+  transition: opacity 250ms ease;
 }
 .row-check {
   width: 18px;
@@ -376,6 +380,13 @@
   background: var(--accent);
   border-color: var(--accent);
   opacity: 1;
+}
+.row-check .tick {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .row-main {
   flex: 1;
@@ -1053,8 +1064,18 @@
   .row-check.popping {
     animation: check-pop 0.45s cubic-bezier(0.3, 1.7, 0.5, 1);
   }
+  .row-check.popping .tick path {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: tick-draw 0.28s 0.06s ease-out forwards;
+  }
   .combo-pop {
     animation: combo-rise 0.9s ease-out forwards;
+  }
+}
+@keyframes tick-draw {
+  to {
+    stroke-dashoffset: 0;
   }
 }
 @keyframes check-pop {

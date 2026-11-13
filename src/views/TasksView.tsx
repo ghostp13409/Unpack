@@ -19,12 +19,13 @@ export function TasksView() {
   const groupBy = useStore((s) => s.groupBy);
   const setGroupBy = useStore((s) => s.setGroupBy);
   const showDone = useStore((s) => s.showDone);
+  const lingering = useStore((s) => s.lingering);
   const setShowDone = useStore((s) => s.setShowDone);
 
   const groups = useMemo(() => {
-    const visible = tasks.filter((t) => (showDone ? t.status !== "dropped" : isOpen(t)));
+    const visible = tasks.filter((t) => (showDone ? t.status !== "dropped" : isOpen(t) || lingering.includes(t.id)));
     return groupTasks(filterTasks(visible, query), groupBy);
-  }, [tasks, query, groupBy, showDone]);
+  }, [tasks, query, groupBy, showDone, lingering]);
 
   const openCount = tasks.filter(isOpen).length;
 

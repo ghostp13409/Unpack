@@ -11,7 +11,7 @@ vi.mock("../lib/celebrate", () => ({ celebrate: vi.fn() }));
 
 import * as api from "../lib/api";
 import { celebrate } from "../lib/celebrate";
-import { useStore } from "./useStore";
+import { LINGER_MS, useStore } from "./useStore";
 
 function task(id: string, over: Partial<Task> = {}): Task {
   return {
@@ -144,5 +144,25 @@ describe("toggleDone", () => {
     expect(calls).toHaveLength(2);
     expect(calls[0][0]).toMatchObject({ combo: 0 });
     expect(calls[1][0]).toMatchObject({ combo: 1 });
+  });
+
+  it("keeps just-completed rows (and an auto-completed parent) lingering, then refreshes Up next", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    useStore.setState({ lingering: [] });
+    seed([task("P"), task("A", { parent_id: "P" })]);
+    vi.mocked(api.upNext).mockClear();
+    await useStore.getState().toggleDone("A");
+    expect(useStore.getState().lingering).toEqual(["A", "P"]);
+    expect(api.upNext).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(LINGER_MS);
+    expect(useStore.getState().lingering).toEqual([]);
+    expect(api.upNext).toHaveBeenCalledTimes(1);
+  });
+
+  it("reopening a task does not linger", async () => {
+    useStore.setState({ lingering: [] });
+    seed([task("X", { status: "done" })]);
+    await useStore.getState().toggleDone("X");
+    expect(useStore.getState().lingering).toEqual([]);
   });
 });

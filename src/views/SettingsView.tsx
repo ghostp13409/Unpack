@@ -18,7 +18,6 @@ export function SettingsView() {
   const [probing, setProbing] = useState(false);
   const [showPath, setShowPath] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
-  const [autostart, setAutostartOn] = useState(false);
   const applied = useRef<string>("");
 
   // Reset the draft only when the saved settings really changed, so a background probe
@@ -37,11 +36,6 @@ export function SettingsView() {
     void probeProvider();
   }, [probeProvider]);
 
-  // The OS owns this one (a Run registry entry), so read it fresh rather than keep a copy in settings.
-  useEffect(() => {
-    api.autostartEnabled().then(setAutostartOn, (e) => setError(api.errorMessage(e)));
-  }, [setError]);
-
   if (!view || !draft) return <div className="page" />;
 
   const status = view.provider_status;
@@ -52,15 +46,6 @@ export function SettingsView() {
     try {
       await api.saveSettings(next);
       await loadSettings();
-    } catch (e) {
-      setError(api.errorMessage(e));
-    }
-  };
-
-  const toggleAutostart = async (on: boolean) => {
-    try {
-      await api.setAutostart(on);
-      setAutostartOn(await api.autostartEnabled());
     } catch (e) {
       setError(api.errorMessage(e));
     }
@@ -278,15 +263,10 @@ export function SettingsView() {
         <section className="settings-section">
           <h3>Startup</h3>
           <div className="settings-grid">
-            <label htmlFor="setting-autostart">Start Unpack when Windows starts</label>
-            <input
-              id="setting-autostart"
-              type="checkbox"
-              className="check"
-              checked={autostart}
-              onChange={(e) => toggleAutostart(e.target.checked)}
-            />
-            <div className="hint">Opens Unpack when you sign in.</div>
+            <label>Open at sign-in</label>
+            <div className="small muted">
+              Press Win+R, type <code>shell:startup</code>, and paste a shortcut to Unpack into that folder.
+            </div>
           </div>
         </section>
 

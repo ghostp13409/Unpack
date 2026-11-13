@@ -8,6 +8,9 @@ import type { GroupBy } from "./derived";
 /** Last celebrated completion, for combos. Session-only, never persisted. */
 let combo: { at: number; count: number } | null = null;
 
+/** How long a just-completed row stays in an open-only list so its tick can be seen. */
+export const LINGER_MS = 1000;
+
 function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 }
@@ -18,6 +21,8 @@ interface StoreState {
   tasks: Task[];
   loaded: boolean;
   showDone: boolean;
+  /** Ids just completed from the UI; open-only lists keep showing them for LINGER_MS. */
+  lingering: string[];
   selectedId: string | null;
   /** Keyboard cursor (J/K) over the visible rows; independent of the open detail. */
   cursorId: string | null;
@@ -43,7 +48,8 @@ interface StoreState {
    * flipping done/todo.
    */
   toggleDone: (id: string, origin?: Origin, next?: Status) => Promise<void>;
-  patchTask: (id: string, patch: TaskPatch) => Promise<Task | null>;
+  /** `rank: false` skips the Up next refresh (the caller refreshes it later). */
+  patchTask: (id: string, patch: TaskPatch, opts?: { rank?: boolean }) => Promise<Task | null>;
   createQuick: (title: string) => Promise<Task | null>;
   openCapture: () => void;
   closeCapture: () => void;
@@ -58,6 +64,7 @@ export const useStore = create<StoreState>((set, get) => ({
   tasks: [],
   loaded: false,
   showDone: false,
+  lingering: [],
   selectedId: null,
   cursorId: null,
   view: "focus",
@@ -72,7 +79,8 @@ export const useStore = create<StoreState>((set, get) => ({
   async loadAll() {
     try {
       const [tasks, upNext] = await Promise.all([api.listTasks(true), api.upNext(5)]);
-      set({ tasks, upNext, loaded: true });
+      // A lingering row keeps its Up next slot; the linger timer refreshes the ranking.
+      set(get().lingering.length ? { tasks, loaded: true } : { tasks, upNext, loaded: true });
     } catch (e) {
       set({ error: api.errorMessage(e), loaded: true });
     }
@@ -95,11 +103,19 @@ export const useStore = create<StoreState>((set, get) => ({
     const decision = decide(tasks, id, to);
     const parentId = decision.completeParentId ?? decision.reopenParentId;
     const parentTo: Status = decision.completeParentId ? "done" : "todo";
+    const completed = to === "done" ? [id, ...(decision.completeParentId ? [decision.completeParentId] : [])] : [];
     set({
       tasks: tasks.map((t) =>
         t.id === id ? { ...t, status: to } : t.id === parentId ? { ...t, status: parentTo } : t,
       ),
+      lingering: [...get().lingering.filter((x) => !completed.includes(x)), ...completed],
     });
+    if (completed.length) {
+      setTimeout(() => {
+        set({ lingering: get().lingering.filter((x) => !completed.includes(x)) });
+        api.upNext(5).then((upNext) => set({ upNext })).catch(() => undefined);
+      }, LINGER_MS);
+    }
 
     if (decision.celebrate) {
       combo = nextCombo(combo, Date.now());
@@ -113,16 +129,18 @@ export const useStore = create<StoreState>((set, get) => ({
       });
     }
 
-    const updated = await get().patchTask(id, { status: to });
+    // While a completed row lingers, Up next keeps its old ranking; the timer refreshes it.
+    const rank = completed.length === 0;
+    const updated = await get().patchTask(id, { status: to }, { rank });
     // A failed patch already reloaded the list, which also undoes the parent change.
-    if (updated && parentId) await get().patchTask(parentId, { status: parentTo });
+    if (updated && parentId) await get().patchTask(parentId, { status: parentTo }, { rank });
   },
 
-  async patchTask(id, patch) {
+  async patchTask(id, patch, opts) {
     try {
       const updated = await api.updateTask(id, patch);
       set({ tasks: get().tasks.map((t) => (t.id === id ? updated : t)) });
-      api.upNext(5).then((upNext) => set({ upNext })).catch(() => undefined);
+      if (opts?.rank !== false) api.upNext(5).then((upNext) => set({ upNext })).catch(() => undefined);
       return updated;
     } catch (e) {
       set({ error: api.errorMessage(e) });

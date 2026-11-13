@@ -32,12 +32,17 @@ export function FocusView() {
   const tasks = useStore((s) => s.tasks);
   const loaded = useStore((s) => s.loaded);
   const upNext = useStore((s) => s.upNext);
+  const lingering = useStore((s) => s.lingering);
   const today = todayISO();
 
   const byId = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
-  const next = upNext.map((r) => ({ task: byId.get(r.task_id), reasons: r.reasons })).filter((x) => x.task && isOpen(x.task));
-  const over = overdue(tasks, today);
-  const week = dueThisWeek(tasks, today);
+  const next = upNext.map((r) => ({ task: byId.get(r.task_id), reasons: r.reasons })).filter((x) => x.task && (isOpen(x.task) || lingering.includes(x.task.id)));
+  // Just-completed rows stay put for a moment so their tick can be seen.
+  const stay = (t: Task) => ({ ...t, status: "todo" as const });
+  const shown = tasks.map((t) => (lingering.includes(t.id) ? stay(t) : t));
+  const real = (t: Task) => byId.get(t.id) ?? t;
+  const over = overdue(shown, today).map(real);
+  const week = dueThisWeek(shown, today).map(real);
   const load = workload(tasks, today);
   const greeting = (() => {
     const h = new Date().getHours();

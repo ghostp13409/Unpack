@@ -57,16 +57,20 @@ function note(freq: number, t0: number, dur: number, vol: number, type: Oscillat
 
 const semi = (f: number, n: number) => f * Math.pow(2, n / 12);
 
-/** Soft tick for a sub-task; each combo step raises it a semitone (capped). */
+/** Highest a combo can lift a sound, in semitones, however fast tasks get finished. */
+export const MAX_TICK_LIFT = 4;
+export const MAX_CHIME_LIFT = 5;
+
+/** Soft tick for a sub-task; each combo step raises it a semitone, up to MAX_TICK_LIFT. */
 export function playTick(combo: number) {
   const t = ctx().currentTime;
-  note(semi(1568, Math.min(combo, 6)), t, 0.08, 0.18, "triangle");
+  note(semi(1568, Math.min(combo, MAX_TICK_LIFT)), t, 0.08, 0.18, "triangle");
 }
 
-/** Warm two-note chime for a task; each combo step raises it a whole step (capped). */
+/** Warm two-note chime for a task; each combo step raises it a whole step, up to MAX_CHIME_LIFT. */
 export function playChime(combo: number) {
   const t = ctx().currentTime;
-  const s = Math.min(combo, 7) * 2;
+  const s = Math.min(combo * 2, MAX_CHIME_LIFT);
   for (const [f, d] of [
     [784, 0],
     [1175, 0.085],

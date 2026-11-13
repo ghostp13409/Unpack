@@ -1,4 +1,3 @@
-import { Check } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { originOf, type Origin } from "../lib/celebrate";
 
@@ -36,7 +35,12 @@ export function Checkbox({
         if (e.animationName === "check-pop") setPopping(false);
       }}
     >
-      {checked && <Check size={12} strokeWidth={3} />}
+      {checked && (
+        <svg className="tick" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+          {/* Drawn short stroke first, then the long one, when it pops. */}
+          <path d="M5 12.5l4.5 4.5L19 7.5" pathLength={1} />
+        </svg>
+      )}
     </button>
   );
 }
